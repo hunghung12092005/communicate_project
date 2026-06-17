@@ -9,7 +9,7 @@ import SurvivalModal from "./components/SurvivalModal";
 import { communicationBooks } from "./data/books";
 import { scenarioEnvironments as fallbackScenarioEnvironments, scenarios as fallbackScenarios } from "./data/scenarios";
 import { uiCopy } from "./data/ui-copy";
-import { fetchAppData } from "./lib/content-api";
+import { fetchAppData, fetchScenarioPage, getSupabaseConfig, hasSupabaseConfig } from "./lib/content-api";
 import {
   buildEnvironmentPath,
   buildIntroPath,
@@ -25,11 +25,15 @@ import ZonePage from "./pages/zone";
 
 gsap.registerPlugin(useGSAP);
 
+const SCENARIO_PAGE_SIZE = 6;
+
 function getPathDepth(pathname) {
   return normalizePathname(pathname).split("/").filter(Boolean).length;
 }
 
 function App() {
+  const supabaseConfig = getSupabaseConfig();
+  const useSupabase = hasSupabaseConfig(supabaseConfig);
   const [pathname, setPathname] = useState(() => {
     if (typeof window === "undefined") {
       return buildIntroPath();
@@ -40,10 +44,20 @@ function App() {
   const [activeScenario, setActiveScenario] = useState(null);
   const [lang, setLang] = useState("vi");
   const [appData, setAppData] = useState(() => ({
-    scenarioEnvironments: fallbackScenarioEnvironments,
-    scenarios: fallbackScenarios,
-    books: communicationBooks,
+    scenarioEnvironments: useSupabase ? [] : fallbackScenarioEnvironments,
+    scenarios: useSupabase ? [] : fallbackScenarios,
+    books: useSupabase ? [] : communicationBooks,
+    totalScenarioCount: useSupabase ? 0 : fallbackScenarios.length,
   }));
+  const [dataError, setDataError] = useState("");
+  const [scenarioFeed, setScenarioFeed] = useState({
+    items: [],
+    currentPage: 1,
+    totalCount: 0,
+    totalPages: 0,
+    isLoading: false,
+    error: "",
+  });
 
   const appRef = useRef(null);
   const heroRef = useRef(null);
@@ -51,9 +65,10 @@ function App() {
   const cardRefs = useRef([]);
   const cardTiltControllers = useRef(new Map());
   const shouldAnimatePageTurnRef = useRef(false);
+  const scenarioLoadLockRef = useRef(false);
 
   const copy = uiCopy[lang];
-  const { scenarioEnvironments, scenarios, books } = appData;
+  const { scenarioEnvironments, scenarios, books, totalScenarioCount } = appData;
   const route = useMemo(() => parsePathname(pathname), [pathname]);
   const currentPage = route.page === "invalid" ? "intro" : route.page;
   const activeEnvironment =
@@ -116,13 +131,12 @@ function App() {
 
     fetchAppData(controller.signal)
       .then((payload) => {
+        setDataError("");
         setAppData({
-          scenarioEnvironments:
-            payload.scenarioEnvironments.length > 0
-              ? payload.scenarioEnvironments
-              : fallbackScenarioEnvironments,
-          scenarios: payload.scenarios.length > 0 ? payload.scenarios : fallbackScenarios,
-          books: payload.books.length > 0 ? payload.books : communicationBooks,
+          scenarioEnvironments: payload.scenarioEnvironments,
+          scenarios: payload.scenarios,
+          books: payload.books,
+          totalScenarioCount: payload.totalScenarioCount ?? payload.scenarios.length,
         });
       })
       .catch((error) => {
@@ -130,11 +144,17 @@ function App() {
           return;
         }
 
+        if (useSupabase) {
+          setDataError(error.message);
+          console.error("Supabase app data load failed.", error);
+          return;
+        }
+
         console.warn("Falling back to local app data.", error);
       });
 
     return () => controller.abort();
-  }, []);
+  }, [useSupabase]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -161,6 +181,87 @@ function App() {
       cardRefs.current = [];
     };
   }, [pathname]);
+
+  useEffect(() => {
+    if (currentPage !== "scenario" || !activeEnvironment) {
+      scenarioLoadLockRef.current = false;
+      setScenarioFeed({
+        items: [],
+        currentPage: 1,
+        totalCount: 0,
+        totalPages: 0,
+        isLoading: false,
+        error: "",
+      });
+      return undefined;
+    }
+
+    const controller = new AbortController();
+
+    scenarioLoadLockRef.current = true;
+    cardRefs.current = [];
+    setScenarioFeed({
+      items: [],
+      currentPage: 1,
+      totalCount: 0,
+      totalPages: 0,
+      isLoading: true,
+      error: "",
+    });
+
+    if (useSupabase) {
+      fetchScenarioPage(
+        {
+          environmentId: activeEnvironment.id,
+          zoneId: route.zoneId,
+          page: 0,
+          pageSize: SCENARIO_PAGE_SIZE,
+        },
+        controller.signal,
+      )
+        .then((payload) => {
+          setScenarioFeed({
+            items: payload.items,
+            currentPage: 1,
+            totalCount: payload.totalCount ?? payload.items.length,
+            totalPages: Math.max(1, Math.ceil((payload.totalCount ?? payload.items.length) / SCENARIO_PAGE_SIZE)),
+            isLoading: false,
+            error: "",
+          });
+        })
+        .catch((error) => {
+          if (error.name === "AbortError") {
+            return;
+          }
+
+          setScenarioFeed({
+            items: [],
+            currentPage: 1,
+            totalCount: 0,
+            totalPages: 0,
+            isLoading: false,
+            error: error.message,
+          });
+        })
+        .finally(() => {
+          scenarioLoadLockRef.current = false;
+        });
+    } else {
+      const firstPageItems = visibleScenarios.slice(0, SCENARIO_PAGE_SIZE);
+
+      setScenarioFeed({
+        items: firstPageItems,
+        currentPage: 1,
+        totalCount: visibleScenarios.length,
+        totalPages: Math.max(1, Math.ceil(visibleScenarios.length / SCENARIO_PAGE_SIZE)),
+        isLoading: false,
+        error: "",
+      });
+      scenarioLoadLockRef.current = false;
+    }
+
+    return () => controller.abort();
+  }, [activeEnvironment, currentPage, route.zoneId, useSupabase, visibleScenarios]);
 
   useEffect(() => {
     if (route.page === "invalid") {
@@ -496,6 +597,75 @@ function App() {
 
     document.getElementById("field-notes")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
+  const handleScenarioPageChange = (nextPage) => {
+    if (scenarioLoadLockRef.current || currentPage !== "scenario" || !activeEnvironment) {
+      return;
+    }
+
+    if (nextPage < 1 || nextPage === scenarioFeed.currentPage) {
+      return;
+    }
+
+    if (scenarioFeed.totalPages > 0 && nextPage > scenarioFeed.totalPages) {
+      return;
+    }
+
+    scenarioLoadLockRef.current = true;
+    setScenarioFeed((current) => ({
+      ...current,
+      isLoading: true,
+      error: "",
+    }));
+
+    if (useSupabase) {
+      fetchScenarioPage({
+        environmentId: activeEnvironment.id,
+        zoneId: route.zoneId,
+        page: nextPage - 1,
+        pageSize: SCENARIO_PAGE_SIZE,
+      })
+        .then((payload) => {
+          setScenarioFeed((current) => ({
+            ...current,
+            items: payload.items,
+            currentPage: nextPage,
+            totalCount: payload.totalCount ?? current.totalCount,
+            totalPages: Math.max(
+              1,
+              Math.ceil((payload.totalCount ?? current.totalCount ?? payload.items.length) / SCENARIO_PAGE_SIZE),
+            ),
+            isLoading: false,
+            error: "",
+          }));
+        })
+        .catch((error) => {
+          setScenarioFeed((current) => ({
+            ...current,
+            isLoading: false,
+            error: error.message,
+          }));
+        })
+        .finally(() => {
+          scenarioLoadLockRef.current = false;
+        });
+
+      return;
+    }
+
+    const startIndex = (nextPage - 1) * SCENARIO_PAGE_SIZE;
+    const nextItems = visibleScenarios.slice(startIndex, startIndex + SCENARIO_PAGE_SIZE);
+
+    setScenarioFeed((current) => ({
+      ...current,
+      items: nextItems,
+      currentPage: nextPage,
+      totalCount: visibleScenarios.length,
+      totalPages: Math.max(1, Math.ceil(visibleScenarios.length / SCENARIO_PAGE_SIZE)),
+      isLoading: false,
+      error: "",
+    }));
+    scenarioLoadLockRef.current = false;
+  };
 
   return (
     <div ref={appRef} className="min-h-[100dvh] bg-[var(--bg)] text-[var(--text)]">
@@ -526,6 +696,14 @@ function App() {
       </div>
 
       <div className="relative z-10">
+        {dataError ? (
+          <div className="mx-auto max-w-[1380px] px-4 pt-4 sm:px-6 lg:px-8">
+            <div className="rounded-[20px] border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">
+              Supabase data load failed: {dataError}
+            </div>
+          </div>
+        ) : null}
+
         <AppHeader
           navItems={navItems}
           currentPage={currentPage}
@@ -546,7 +724,7 @@ function App() {
                 copy={copy}
                 books={books}
                 environments={scenarioEnvironments}
-                scenarioCount={scenarios.length}
+                scenarioCount={totalScenarioCount}
                 onStart={handleStartFlow}
               />
             ) : null}
@@ -579,7 +757,12 @@ function App() {
               <ScenarioPage
                 activeEnvironment={activeEnvironment}
                 activeZone={activeZone}
-                scenarios={visibleScenarios}
+                scenarios={scenarioFeed.items}
+                isLoading={scenarioFeed.isLoading}
+                loadError={scenarioFeed.error}
+                currentPage={scenarioFeed.currentPage}
+                totalPages={scenarioFeed.totalPages}
+                onPageChange={handleScenarioPageChange}
                 onBack={handleBackToZone}
                 onSelectScenario={setActiveScenario}
                 cardRefs={cardRefs}
@@ -595,7 +778,7 @@ function App() {
 
         <AppFooter
           lang={lang}
-          scenarioCount={scenarios.length}
+          scenarioCount={totalScenarioCount}
           onNavigateIntro={handleBackToIntro}
           onNavigateEnvironment={handleStartFlow}
           onOpenFieldNotes={handleOpenFieldNotes}

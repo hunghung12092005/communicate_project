@@ -3,6 +3,11 @@ import ScenarioCardGrid from "../../components/scenario-card-grid";
 
 function ScenarioPage({
   scenarios,
+  isLoading,
+  loadError,
+  currentPage,
+  totalPages,
+  onPageChange,
   onBack,
   onSelectScenario,
   cardRefs,
@@ -11,6 +16,8 @@ function ScenarioPage({
   lang,
   copy,
 }) {
+  const pageNumbers = Array.from({ length: totalPages }, (_, index) => index + 1);
+
   return (
     <section className="section-ornament selector-landing selector-landing-scenario">
       <div className="selector-landing-shell px-1 sm:px-0">
@@ -45,6 +52,57 @@ function ScenarioPage({
                 </div>
               </div>
             )}
+
+            {loadError ? (
+              <div className="mt-4 rounded-[22px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                {loadError}
+              </div>
+            ) : null}
+
+            {scenarios.length ? (
+              <div className="mt-4 flex flex-col items-center gap-3 py-2">
+                {isLoading ? (
+                  <p className="text-sm text-[var(--text-soft)]">
+                    {lang === "vi" ? "Đang chuyển trang..." : "Loading page..."}
+                  </p>
+                ) : null}
+                {totalPages > 1 ? (
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onPageChange(currentPage - 1)}
+                      disabled={currentPage <= 1 || isLoading}
+                      className="inline-flex min-h-10 items-center rounded-full border border-[var(--line)] bg-white/64 px-4 text-sm font-semibold text-[var(--text-soft)] disabled:cursor-not-allowed disabled:opacity-45 hover:border-[var(--line-strong)] hover:bg-white"
+                    >
+                      {lang === "vi" ? "Trước" : "Prev"}
+                    </button>
+                    {pageNumbers.map((pageNumber) => (
+                      <button
+                        key={pageNumber}
+                        type="button"
+                        onClick={() => onPageChange(pageNumber)}
+                        disabled={isLoading}
+                        className={`inline-flex h-10 min-w-10 items-center justify-center rounded-full border px-3 text-sm font-semibold ${
+                          pageNumber === currentPage
+                            ? "border-transparent bg-[var(--surface-inverse)] text-white"
+                            : "border-[var(--line)] bg-white/64 text-[var(--text-soft)] hover:border-[var(--line-strong)] hover:bg-white"
+                        }`}
+                      >
+                        {pageNumber}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => onPageChange(currentPage + 1)}
+                      disabled={currentPage >= totalPages || isLoading}
+                      className="inline-flex min-h-10 items-center rounded-full border border-[var(--line)] bg-white/64 px-4 text-sm font-semibold text-[var(--text-soft)] disabled:cursor-not-allowed disabled:opacity-45 hover:border-[var(--line-strong)] hover:bg-white"
+                    >
+                      {lang === "vi" ? "Sau" : "Next"}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </div>
       </div>

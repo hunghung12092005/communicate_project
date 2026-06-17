@@ -36,10 +36,16 @@ export function getAppDataUrl() {
 
 function normalizeSupabaseUrl(value) {
   const trimmed = value?.trim() ?? "";
-  return trimmed ? trimTrailingSlash(trimmed) : "";
+
+  if (!trimmed) {
+    return "";
+  }
+
+  const normalized = trimTrailingSlash(trimmed);
+  return normalized.replace(/\/rest\/v1$/i, "");
 }
 
-function getSupabaseConfig() {
+export function getSupabaseConfig() {
   const url = normalizeSupabaseUrl(import.meta.env.VITE_SUPABASE_URL);
   const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim() ?? "";
 
@@ -56,7 +62,7 @@ function getSupabaseConfig() {
   };
 }
 
-function hasSupabaseConfig(config) {
+export function hasSupabaseConfig(config = getSupabaseConfig()) {
   return Boolean(config.url && config.anonKey);
 }
 
@@ -68,8 +74,40 @@ function createSupabaseHeaders(anonKey) {
   };
 }
 
-function buildSupabaseTableUrl(baseUrl, table) {
-  return `${baseUrl}/rest/v1/${table}?select=*`;
+function buildSupabaseTableUrl(baseUrl, table, options = {}) {
+  const url = new URL(`${baseUrl}/rest/v1/${table}`);
+  const {
+    select = "*",
+    order,
+    filters = [],
+    limit,
+    offset,
+  } = options;
+
+  url.searchParams.set("select", select);
+
+  if (order) {
+    url.searchParams.set("order", order);
+  }
+
+  filters.forEach(({ column, operator = "eq", value }) => {
+    if (value === undefined || value === null || value === "") {
+      return;
+    }
+
+    const normalizedColumn = /[A-Z]/.test(column) ? `"${column}"` : column;
+    url.searchParams.set(normalizedColumn, `${operator}.${value}`);
+  });
+
+  if (Number.isInteger(limit)) {
+    url.searchParams.set("limit", String(limit));
+  }
+
+  if (Number.isInteger(offset)) {
+    url.searchParams.set("offset", String(offset));
+  }
+
+  return url.toString();
 }
 
 function sortByOrder(items) {
@@ -97,11 +135,14 @@ function normalizePayload(payload) {
 }
 
 async function fetchSupabaseTable(baseUrl, anonKey, table, signal) {
-  const response = await fetch(buildSupabaseTableUrl(baseUrl, table), {
+  const response = await fetch(
+    buildSupabaseTableUrl(baseUrl, table, { order: "sort_order.asc,id.asc" }),
+    {
     method: "GET",
     headers: createSupabaseHeaders(anonKey),
     signal,
-  });
+    },
+  );
 
   if (!response.ok) {
     throw new Error(`Supabase table "${table}" request failed with status ${response.status}`);
@@ -111,11 +152,47 @@ async function fetchSupabaseTable(baseUrl, anonKey, table, signal) {
   return Array.isArray(payload) ? payload : [];
 }
 
+function parseSupabaseCount(response) {
+  const contentRange = response.headers.get("content-range");
+
+  if (!contentRange) {
+    return null;
+  }
+
+  const parts = contentRange.split("/");
+  const totalCount = Number(parts[1]);
+
+  return Number.isFinite(totalCount) ? totalCount : null;
+}
+
+async function fetchSupabaseScenarioCount(config, signal) {
+  const response = await fetch(
+    buildSupabaseTableUrl(config.url, config.scenariosTable, {
+      select: "id",
+      limit: 1,
+    }),
+    {
+      method: "GET",
+      headers: {
+        ...createSupabaseHeaders(config.anonKey),
+        Prefer: "count=exact",
+      },
+      signal,
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Supabase scenario count request failed with status ${response.status}`);
+  }
+
+  return parseSupabaseCount(response) ?? 0;
+}
+
 export async function fetchAppData(signal) {
   const supabaseConfig = getSupabaseConfig();
 
   if (hasSupabaseConfig(supabaseConfig)) {
-    const [environments, scenarios, books] = await Promise.all([
+    const [environments, books, totalScenarioCount] = await Promise.all([
       fetchSupabaseTable(
         supabaseConfig.url,
         supabaseConfig.anonKey,
@@ -125,24 +202,22 @@ export async function fetchAppData(signal) {
       fetchSupabaseTable(
         supabaseConfig.url,
         supabaseConfig.anonKey,
-        supabaseConfig.scenariosTable,
-        signal,
-      ),
-      fetchSupabaseTable(
-        supabaseConfig.url,
-        supabaseConfig.anonKey,
         supabaseConfig.booksTable,
         signal,
       ),
+      fetchSupabaseScenarioCount(supabaseConfig, signal),
     ]);
 
-    const normalized = normalizePayload({ environments, scenarios, books });
+    const normalized = normalizePayload({ environments, scenarios: [], books });
 
-    if (!normalized.scenarioEnvironments.length && !normalized.scenarios.length) {
+    if (!normalized.scenarioEnvironments.length) {
       throw new Error("Supabase payload is empty or invalid");
     }
 
-    return normalized;
+    return {
+      ...normalized,
+      totalScenarioCount,
+    };
   }
 
   const response = await fetch(getAppDataUrl(), {
@@ -164,5 +239,61 @@ export async function fetchAppData(signal) {
     throw new Error("App data payload is empty or invalid");
   }
 
-  return normalized;
+  return {
+    ...normalized,
+    totalScenarioCount: normalized.scenarios.length,
+  };
+}
+
+export async function fetchScenarioPage(
+  {
+    environmentId,
+    zoneId,
+    page = 0,
+    pageSize = 12,
+  },
+  signal,
+) {
+  const supabaseConfig = getSupabaseConfig();
+
+  if (!hasSupabaseConfig(supabaseConfig)) {
+    throw new Error("Supabase config is missing for scenario pagination");
+  }
+
+  const filters = [{ column: "environmentId", value: environmentId }];
+
+  if (zoneId && zoneId !== "all") {
+    filters.push({ column: "zoneId", value: zoneId });
+  }
+
+  const response = await fetch(
+    buildSupabaseTableUrl(supabaseConfig.url, supabaseConfig.scenariosTable, {
+      order: "sort_order.asc,id.asc",
+      filters,
+      limit: pageSize,
+      offset: page * pageSize,
+    }),
+    {
+      method: "GET",
+      headers: {
+        ...createSupabaseHeaders(supabaseConfig.anonKey),
+        Prefer: "count=exact",
+      },
+      signal,
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Supabase scenario page request failed with status ${response.status}`);
+  }
+
+  const payload = await response.json();
+  const items = Array.isArray(payload) ? sortByOrder(payload) : [];
+  const totalCount = parseSupabaseCount(response);
+
+  return {
+    items,
+    totalCount,
+    hasMore: totalCount === null ? items.length === pageSize : (page + 1) * pageSize < totalCount,
+  };
 }
