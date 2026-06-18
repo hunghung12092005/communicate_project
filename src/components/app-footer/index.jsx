@@ -6,6 +6,7 @@ function AppFooter({
   scenarioCount = 0,
   onNavigateIntro,
   onNavigateEnvironment,
+  onNavigateInterview,
   onOpenFieldNotes,
 }) {
   const [openPanel, setOpenPanel] = useState(null);
@@ -15,13 +16,14 @@ function AppFooter({
       lang === "vi"
         ? {
             brand: "daily.dialogue",
-            tag: "Field guide for awkward moments",
+            tag: "Khoảng khắc giao tiếp khó xử",
             blurb:
               "Một app nhỏ để mở lời, giữ nhịp và rời đi gọn hơn trong các tình huống giao tiếp khó xử thường ngày.",
             navTitle: "Điều hướng",
             nav: [
               { id: "intro", label: "Giới thiệu", onClick: onNavigateIntro },
               { id: "environment", label: "Môi trường", onClick: onNavigateEnvironment },
+              { id: "interview dialogue", label: "Phỏng vấn ứng xử", onClick: onNavigateInterview },
               { id: "notes", label: "Field notes", onClick: onOpenFieldNotes },
             ],
             systemTitle: "Hệ thống",
@@ -52,6 +54,7 @@ function AppFooter({
             nav: [
               { id: "intro", label: "Intro", onClick: onNavigateIntro },
               { id: "environment", label: "Environments", onClick: onNavigateEnvironment },
+              { id: "interview", label: "Interview", onClick: onNavigateInterview },
               { id: "notes", label: "Field notes", onClick: onOpenFieldNotes },
             ],
             systemTitle: "System",
@@ -73,7 +76,7 @@ function AppFooter({
             closing: "Say less. Leave light.",
             copyright: `© ${new Date().getFullYear()} daily.dialogue`,
           },
-    [lang, onNavigateEnvironment, onNavigateIntro, onOpenFieldNotes, scenarioCount],
+    [lang, onNavigateEnvironment, onNavigateInterview, onNavigateIntro, onOpenFieldNotes, scenarioCount],
   );
 
   return (

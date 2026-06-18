@@ -43,6 +43,18 @@ function ScenarioPage({
                 onCardPointerLeave={onCardPointerLeave}
                 lang={lang}
                 copy={copy}
+                isLoading={isLoading}
+              />
+            ) : isLoading ? (
+              <ScenarioCardGrid
+                scenarios={[]}
+                onSelectScenario={onSelectScenario}
+                cardRefs={cardRefs}
+                onCardPointerMove={onCardPointerMove}
+                onCardPointerLeave={onCardPointerLeave}
+                lang={lang}
+                copy={copy}
+                isLoading={isLoading}
               />
             ) : (
               <div className="grid min-h-full place-items-center rounded-[24px] bg-[var(--surface)] p-6 sm:p-8 lg:p-10">

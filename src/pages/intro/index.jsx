@@ -1,5 +1,6 @@
 import { ArrowRight, Waypoints } from "lucide-react";
 import IntroFieldNotesSection from "../../components/intro-field-notes-section";
+import IntroProcessSection from "../../components/intro-process-section";
 import IntroRhythmSection from "../../components/intro-rhythm-section";
 import LibraryRibbon from "../../components/library-ribbon";
 
@@ -149,7 +150,7 @@ function IntroPage({
                   <div className="mt-4 grid gap-3 sm:grid-cols-[0.9fr_1.1fr]">
                     <div className="rounded-[22px] border border-[var(--line)] bg-white/58 px-4 py-4 sm:rounded-[24px] sm:px-5 sm:py-5">
                       <p className="text-[2.7rem] font-semibold leading-none tracking-[-0.08em] text-[var(--text)] sm:text-[3.35rem]">
-                        {String(scenarioCount).padStart(2, "0")}
+                        200
                       </p>
                       <p className="mt-2 max-w-[16ch] text-sm leading-6 text-[var(--text-soft)] sm:mt-3 sm:max-w-[18ch] sm:leading-7">
                         {copy.hero.scenariosArmed(scenarioCount)}
@@ -229,6 +230,8 @@ function IntroPage({
       </section>
 
       <LibraryRibbon lang={lang} books={books} />
+
+      <IntroProcessSection lang={lang} />
 
 
       <IntroFieldNotesSection

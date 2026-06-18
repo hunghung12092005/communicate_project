@@ -14,6 +14,10 @@ export function buildEnvironmentPath() {
   return "/environment";
 }
 
+export function buildInterviewPath() {
+  return "/interview";
+}
+
 export function buildZonePath(environmentId) {
   return `/environment/${environmentId}/zones`;
 }
@@ -31,6 +35,10 @@ export function parsePathname(pathname) {
   }
 
   if (segments[0] !== "environment") {
+    if (segments[0] === "interview" && segments.length === 1) {
+      return { page: "interview" };
+    }
+
     return { page: "invalid" };
   }
 

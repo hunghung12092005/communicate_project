@@ -10,6 +10,7 @@ export const uiCopy = {
     nav: [
       { id: "intro", label: "Intro" },
       { id: "environment", label: "Environment" },
+      { id: "interview", label: "Interview" },
       { id: "zone", label: "Setting" },
       { id: "scenario", label: "Playbooks" },
     ],
@@ -126,6 +127,7 @@ export const uiCopy = {
     nav: [
       { id: "intro", label: "Giới thiệu" },
       { id: "environment", label: "Môi trường" },
+      { id: "interview dialogue", label: "Phỏng vấn ứng xử" },
       { id: "zone", label: "Khu vực" },
       { id: "scenario", label: "Tình huống" },
     ],
@@ -140,7 +142,7 @@ export const uiCopy = {
       runFirstScenario: "Chọn môi trường",
       noteButton: "Mở ghi chú",
       liveDoctrine: "Bản đồ tác chiến",
-      scenariosArmed: (count) => `${String(count).padStart(2, "0")} tình huống sẵn sàng`,
+      scenariosArmed: (count) => `+200 tình huống sẵn sàng`,
       highPressureTheaters: "Khu vực áp lực cao",
       unitMap: "Bản đồ đơn vị",
     },
@@ -154,7 +156,7 @@ export const uiCopy = {
       title: "Chuẩn bị kỹ luôn hiệu quả hơn cố tỏ ra duyên khi bầu không khí công sở trở nên khó xử.",
     },
     stats: [
-      { label: "Tình huống đã map", value: "00" },
+      { label: "Tình huống đã map", value: "+200" },
       { label: "Chiến thuật", value: "12" },
       { label: "Ghi chú", value: "06" },
     ],

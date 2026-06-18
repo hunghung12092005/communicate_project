@@ -7,11 +7,13 @@ import AppHeader from "./components/app-header";
 import BrandMark from "./components/brand-mark";
 import SurvivalModal from "./components/SurvivalModal";
 import { communicationBooks } from "./data/books";
+import { interviewQuestions } from "./data/interview-questions";
 import { scenarioEnvironments as fallbackScenarioEnvironments, scenarios as fallbackScenarios } from "./data/scenarios";
 import { uiCopy } from "./data/ui-copy";
 import { fetchAppData, fetchScenarioPage, getSupabaseConfig, hasSupabaseConfig } from "./lib/content-api";
 import {
   buildEnvironmentPath,
+  buildInterviewPath,
   buildIntroPath,
   buildScenarioPath,
   buildZonePath,
@@ -20,6 +22,7 @@ import {
 } from "./lib/routes";
 import EnvironmentPage from "./pages/environment";
 import IntroPage from "./pages/intro";
+import InterviewPage from "./pages/interview";
 import ScenarioPage from "./pages/scenario";
 import ZonePage from "./pages/zone";
 
@@ -29,6 +32,14 @@ const SCENARIO_PAGE_SIZE = 6;
 
 function getPathDepth(pathname) {
   return normalizePathname(pathname).split("/").filter(Boolean).length;
+}
+
+function scrollToTopForApiCall() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
 }
 
 function App() {
@@ -96,8 +107,8 @@ function App() {
   const stepItems = useMemo(
     () => [
       { id: "environment", label: copy.nav[1].label },
-      { id: "zone", label: copy.nav[2].label },
-      { id: "scenario", label: copy.nav[3].label },
+      { id: "zone", label: copy.nav[3].label },
+      { id: "scenario", label: copy.nav[4].label },
     ],
     [copy],
   );
@@ -105,6 +116,7 @@ function App() {
     () => [
       { id: "intro", label: copy.nav[0].label, disabled: false },
       { id: "environment", label: copy.nav[1].label, disabled: false },
+      { id: "interview", label: copy.nav[2].label, disabled: false },
     ],
     [copy],
   );
@@ -128,6 +140,7 @@ function App() {
 
   useEffect(() => {
     const controller = new AbortController();
+    scrollToTopForApiCall();
 
     fetchAppData(controller.signal)
       .then((payload) => {
@@ -197,6 +210,7 @@ function App() {
     }
 
     const controller = new AbortController();
+    scrollToTopForApiCall();
 
     scenarioLoadLockRef.current = true;
     cardRefs.current = [];
@@ -570,6 +584,11 @@ function App() {
       return;
     }
 
+    if (pageId === "interview") {
+      navigateTo(buildInterviewPath(), { animate: false });
+      return;
+    }
+
     if (pageId === "zone" && activeEnvironment) {
       navigateTo(buildZonePath(activeEnvironment.id), { animate: false });
       return;
@@ -618,6 +637,7 @@ function App() {
     }));
 
     if (useSupabase) {
+      scrollToTopForApiCall();
       fetchScenarioPage({
         environmentId: activeEnvironment.id,
         zoneId: route.zoneId,
@@ -741,6 +761,15 @@ function App() {
               />
             ) : null}
 
+            {currentPage === "interview" ? (
+              <InterviewPage
+                lang={lang}
+                questions={interviewQuestions}
+                onBack={handleBackToIntro}
+                onStartFlow={handleStartFlow}
+              />
+            ) : null}
+
             {currentPage === "zone" && activeEnvironment ? (
               <ZonePage
                 activeEnvironment={activeEnvironment}
@@ -781,6 +810,7 @@ function App() {
           scenarioCount={totalScenarioCount}
           onNavigateIntro={handleBackToIntro}
           onNavigateEnvironment={handleStartFlow}
+          onNavigateInterview={() => navigateTo(buildInterviewPath(), { animate: false })}
           onOpenFieldNotes={handleOpenFieldNotes}
         />
       </div>
